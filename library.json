@@ -1,0 +1,6 @@
+{
+  "name": "PS2X",
+  "version": "1.0.0",
+  "description": "Arduino library for interfacing with PS2 controllers - forked from original madsci1016/Arduino-PS2X with hardware spi from itsmevjnk/Arduino-PS2X",
+  "platforms": ["espressif32", "espressif8266"]
+}
