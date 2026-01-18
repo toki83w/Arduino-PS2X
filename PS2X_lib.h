@@ -1,3 +1,4 @@
+// clang-format off
 /******************************************************************
 *  Super amazing PS2 controller Arduino Library v1.8
 *		details and example sketch: 
@@ -18,9 +19,9 @@
 *    0.2 fixed config_gamepad miss-spelling
 *        added new functions:
 *          NewButtonState();
-*          NewButtonState(unsigned int);
-*          ButtonPressed(unsigned int);
-*          ButtonReleased(unsigned int);
+*          NewButtonState(uint16_t);
+*          ButtonPressed(uint16_t);
+*          ButtonReleased(uint16_t);
 *        removed 'PS' from beginning of ever function
 *    1.0 found and fixed bug that wasn't configuring controller
 *        added ability to define pins
@@ -71,249 +72,257 @@ GNU General Public License for more details.
 <http://www.gnu.org/licenses/>
 *  
 ******************************************************************/
+// clang-format on
 
 // $$$$$$$$$$$$ DEBUG ENABLE SECTION $$$$$$$$$$$$$$$$
 // to debug ps2 controller, uncomment these two lines to print out debug to uart
-//#define PS2X_DEBUG
-//#define PS2X_COM_DEBUG
+// #define PS2X_DEBUG
+// #define PS2X_COM_DEBUG
 
-#ifndef PS2X_lib_h
-  #define PS2X_lib_h
+#pragma once
 
-#if ARDUINO > 22
-  #include "Arduino.h"
-#else
-  #include "WProgram.h"
-#endif
-
-#include <math.h>
-#include <stdio.h>
-#include <stdint.h>
+#include <Arduino.h>
 #include <SPI.h>
 
-/* SPI timing configuration */
-#define CTRL_BITRATE        250000UL // SPI bitrate (Hz). Please note that on AVR Arduinos, the lowest bitrate possible is 125kHz.
-#if (1000000UL / (2 * CTRL_BITRATE) > 0)
-#define CTRL_CLK      (1000000UL / (2 * CTRL_BITRATE)) // delay duration between SCK high and low
-#else
-#define CTRL_CLK      1
-#endif
-#define CTRL_BYTE_DELAY     10 // delay duration between byte reads (uS)
-#define CTRL_PACKET_DELAY   16 // delay duration between packets (mS) - according to playstation.txt this should be set to 16mS, but it seems that it can go down to 4mS without problems
-#if !defined(SPI_HAS_TRANSACTION) && defined(__AVR__)
-// SPI divider for AVR
-#if (F_CPU / CTRL_BITRATE < 3)
-#define CTRL_DIVIDER    SPI_CLOCK_DIV2
-#elif (F_CPU / CTRL_BITRATE < 6)
-#define CTRL_DIVIDER    SPI_CLOCK_DIV4
-#elif (F_CPU / CTRL_BITRATE < 12)
-#define CTRL_DIVIDER    SPI_CLOCK_DIV8
-#elif (F_CPU / CTRL_BITRATE < 24)
-#define CTRL_DIVIDER    SPI_CLOCK_DIV16
-#elif (F_CPU / CTRL_BITRATE < 48)
-#define CTRL_DIVIDER    SPI_CLOCK_DIV32
-#elif (F_CPU / CTRL_BITRATE < 96)
-#define CTRL_DIVIDER    SPI_CLOCK_DIV64
-#else
-#define CTRL_DIVIDER    SPI_CLOCK_DIV128
-#endif
-#endif
 
-/* port register data types */
-#if defined(__AVR__)
-typedef volatile uint8_t port_reg_t;
-typedef uint8_t port_mask_t;
-#define HAVE_PORTREG_IO
-#elif defined(__SAM3X8E__)
-typedef volatile RwReg port_reg_t;
-typedef uint32_t port_mask_t;
-#define HAVE_PORTREG_IO
-#elif defined(__PIC32__) // TODO: is this how we're supposed to detect PIC32?
-typedef volatile uint32_t port_reg_t;
-typedef uint16_t port_mask_t;
-#define HAVE_PORTREG_SC
-#elif (defined(__arm__) || defined(ARDUINO_FEATHER52)) &&                      \
-    !defined(ARDUINO_ARCH_MBED) && !defined(ARDUINO_ARCH_RP2040)
-typedef volatile uint32_t port_reg_t;
-typedef uint32_t port_mask_t;
-#define HAVE_PORTREG_IO
+class PS2X
+{
+    /* SPI timing configuration */
+    // SPI bitrate (Hz)
+    static constexpr uint32_t CTRL_BITRATE{250'000UL};
 
-#endif
+    // delay duration between SCK high and low
+    static constexpr uint16_t CTRL_CLK{1'000'000UL / (2 * CTRL_BITRATE) > 0 ? (1'000'000UL / (2 * CTRL_BITRATE)) : 1};
 
-//These are our button constants
-#define PSB_SELECT      0x0001
-#define PSB_L3          0x0002
-#define PSB_R3          0x0004
-#define PSB_START       0x0008
-#define PSB_PAD_UP      0x0010
-#define PSB_PAD_RIGHT   0x0020
-#define PSB_PAD_DOWN    0x0040
-#define PSB_PAD_LEFT    0x0080
-#define PSB_L2          0x0100
-#define PSB_R2          0x0200
-#define PSB_L1          0x0400
-#define PSB_R1          0x0800
-#define PSB_GREEN       0x1000
-#define PSB_RED         0x2000
-#define PSB_BLUE        0x4000
-#define PSB_PINK        0x8000
-#define PSB_TRIANGLE    0x1000
-#define PSB_CIRCLE      0x2000
-#define PSB_CROSS       0x4000
-#define PSB_SQUARE      0x8000
+    // delay duration between byte reads (uS)
+    static constexpr uint16_t CTRL_BYTE_DELAY{10};
 
-//Guitar  button constants
-#define UP_STRUM		0x0010
-#define DOWN_STRUM		0x0040
-#define LEFT_STRUM		0x0080
-#define RIGHT_STRUM		0x0020
-#define STAR_POWER		0x0100
-#define GREEN_FRET		0x0200
-#define YELLOW_FRET		0x1000
-#define RED_FRET		0x2000
-#define BLUE_FRET		0x4000
-#define ORANGE_FRET		0x8000
-#define WHAMMY_BAR		8
+    // delay duration between packets (mS) - according to playstation.txt this
+    // should be set to 16mS, but it seems that it can go down to 4mS without
+    // problems
+    static constexpr uint16_t CTRL_PACKET_DELAY{16};
 
-//These are stick values
-#define PSS_RX 5
-#define PSS_RY 6
-#define PSS_LX 7
-#define PSS_LY 8
+public:
+    enum class Type
+    {
+        Unknown,
+        GuitarHero,
+        DualShock,
+        WirelessDualShock,
+        Other
+    };
 
-//These are analog buttons
-#define PSAB_PAD_RIGHT    9
-#define PSAB_PAD_UP      11
-#define PSAB_PAD_DOWN    12
-#define PSAB_PAD_LEFT    10
-#define PSAB_L2          19
-#define PSAB_R2          20
-#define PSAB_L1          17
-#define PSAB_R1          18
-#define PSAB_GREEN       13
-#define PSAB_RED         14
-#define PSAB_BLUE        15
-#define PSAB_PINK        16
-#define PSAB_TRIANGLE    13
-#define PSAB_CIRCLE      14
-#define PSAB_CROSS       15
-#define PSAB_SQUARE      16
+    enum class Button
+    {
+        Select    = 0x0001,
+        L3        = 0x0002,
+        R3        = 0x0004,
+        Start     = 0x0008,
+        Pad_Up    = 0x0010,
+        Pad_Right = 0x0020,
+        Pad_Down  = 0x0040,
+        Pad_Left  = 0x0080,
+        L2        = 0x0100,
+        R2        = 0x0200,
+        L1        = 0x0400,
+        R1        = 0x0800,
+        Green     = 0x1000,
+        Red       = 0x2000,
+        Blue      = 0x4000,
+        Pink      = 0x8000,
+        Triangle  = 0x1000,
+        Circle    = 0x2000,
+        Cross     = 0x4000,
+        Square    = 0x8000,
+    };
 
-#define SET(x,y) (x|=(1<<y))
-#define CLR(x,y) (x&=(~(1<<y)))
-#define CHK(x,y) (x & (1<<y))
-#define TOG(x,y) (x^=(1<<y))
+    enum class AnalogButton
+    {
+        Stick_Rx  = 5,
+        Stick_Ry  = 6,
+        Stick_Lx  = 7,
+        Stick_Ly  = 8,
+        Pad_Right = 9,
+        Pad_Up    = 11,
+        Pad_Down  = 12,
+        Pad_Left  = 10,
+        L2        = 19,
+        R2        = 20,
+        L1        = 17,
+        R1        = 18,
+        Green     = 13,
+        Red       = 14,
+        Blue      = 15,
+        Pink      = 16,
+        Triangle  = 13,
+        Circle    = 14,
+        Cross     = 15,
+        Square    = 16,
+    };
 
-class PS2X {
-  public:
-    boolean Button(uint16_t);                //will be TRUE if button is being pressed
-    unsigned int ButtonDataByte();
-    boolean NewButtonState();
-    boolean NewButtonState(unsigned int);    //will be TRUE if button was JUST pressed OR released
-    boolean ButtonPressed(unsigned int);     //will be TRUE if button was JUST pressed
-    boolean ButtonReleased(unsigned int);    //will be TRUE if button was JUST released
-    void read_gamepad();
-    boolean  read_gamepad(boolean, byte);
-    byte readType();
-    /* config_gamepad for software SPI */
-    byte config_gamepad(uint8_t, uint8_t, uint8_t, uint8_t); // specify pins, pressure and rumble disabled
-    byte config_gamepad(uint8_t, uint8_t, uint8_t, uint8_t, bool, bool); // specify pins AND pressure&rumble mode
-    /* config_gamepad for hardware SPI */
-    byte config_gamepad(SPIClass*, uint8_t); // specify SPIClass and ATT pin, begins SPI by itself
-    byte config_gamepad(SPIClass*, uint8_t, bool); // specify SPIClass and ATT pin, as well as whether to begin SPI
-    byte config_gamepad(SPIClass*, uint8_t, bool, bool); // specify SPIClass, ATT pin and pressure&rumble mode, begins SPI by itself
-    byte config_gamepad(SPIClass*, uint8_t, bool, bool, bool); // specify SPIClass, ATT pin, pressure&rumble mode, and whether to begin SPI
-    // ready-to-use config functions for select boards (right now only supports Arduino with default SPI port and ESP32 HSPI and VSPI)
-    byte config_gamepad_arduino_spi(uint8_t); // specify ATT pin. please note that using this on ESP32 is functionally similar to config_gamepad_esp32_vspi(uint8_t)
-    byte config_gamepad_arduino_spi(uint8_t, bool, bool); // specify ATT pin and pressure&rumble mode. please note that using this on ESP32 is functionally similar to config_gamepad_esp32_vspi(uint8_t, bool, bool)
-#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32S3
-    // HSPI
-    byte config_gamepad_esp32_hspi(uint8_t); // use HSPI with custom ATT pin
-    byte config_gamepad_esp32_hspi(uint8_t, bool, bool); // use HSPI with custom ATT pin, also specify whether to enable pressure and rumble
-    byte config_gamepad_esp32_hspi(uint8_t, uint8_t, uint8_t, uint8_t); // use HSPI with custom pins
-    byte config_gamepad_esp32_hspi(uint8_t, uint8_t, uint8_t, uint8_t, bool, bool); // use HSPI with custom pins, also specify whether to enable pressure and rumble
-    // VSPI
-    byte config_gamepad_esp32_vspi(uint8_t); // use VSPI with custom ATT pin
-    byte config_gamepad_esp32_vspi(uint8_t, bool, bool); // use VSPI with custom ATT pin, also specify whether to enable pressure and rumble
-    byte config_gamepad_esp32_vspi(uint8_t, uint8_t, uint8_t, uint8_t); // use VSPI with custom pins
-    byte config_gamepad_esp32_vspi(uint8_t, uint8_t, uint8_t, uint8_t, bool, bool); // use VSPI with custom pins, also specify whether to enable pressure and rumble
-#endif
+    Type readType();
+
+    bool readGamepad(bool motor1 = false, uint8_t motor2 = 0);
+
+    bool isPressed(Button button);
+
+    bool wasAnyToggled();
+    bool wasToggled(Button button);
+    bool wasPressed(Button button);
+    bool wasReleased(Button button);
+
+    uint8_t analog(AnalogButton button);
 
     void enableRumble();
     bool enablePressures();
-    byte Analog(byte);
-    void reconfig_gamepad();
 
-  private:
-    inline void CLK_SET(void);
-    inline void CLK_CLR(void);
-    inline void CMD_SET(void);
-    inline void CMD_CLR(void);
-    inline void ATT_SET(void);
-    inline void ATT_CLR(void);
-    inline bool DAT_CHK(void);
+    // software SPI
+    uint8_t begin(uint8_t clk, uint8_t cmd, uint8_t att, uint8_t dat, bool pressures = false, bool rumble = false);
 
-    inline void BEGIN_SPI_NOATT(void);
-    inline void END_SPI_NOATT(void);
+#if defined(SPI_HAS_TRANSACTION)
+    // explicit hardware SPI
+    uint8_t begin(SPIClass* spi, uint8_t att, bool pressures = false, bool rumble = false, bool begin = true);
 
-    inline void BEGIN_SPI(void);
-    inline void END_SPI(void);
-    
-    byte config_gamepad_stub(bool, bool); // common gamepad initialization sequence
+    // default hardware SPI
+    uint8_t begin_spi(uint8_t att, bool pressures = false, bool rumble = false);
+    // default hardware SPI with custom pins
+    uint8_t begin_spi(uint8_t clk, uint8_t cmd, uint8_t att, uint8_t dat, bool pressures = false, bool rumble = false);
 
-    unsigned char _gamepad_shiftinout (char);
-    unsigned char PS2data[21];
-    void sendCommandString(byte*, byte);
-    unsigned char i;
-    unsigned int last_buttons;
-    unsigned int buttons;
+    // HSPI
+    uint8_t begin_hspi(uint8_t att, bool pressures = false, bool rumble = false);
+    // HSPI with custom pins
+    uint8_t begin_hspi(uint8_t clk, uint8_t cmd, uint8_t att, uint8_t dat, bool pressures = false, bool rumble = false);
 
-    /* pin I/O configuration, mostly relevant to software SPI support (except ATT which is used in both software and hardware SPI) */
-    #if defined(HAVE_PORTREG_IO) // platform has port registers in input/output configuration (eg. AVR, STM32)
-      port_mask_t _clk_mask; 
-      port_reg_t *_clk_oreg;
-      port_mask_t _cmd_mask; 
-      port_reg_t *_cmd_oreg;
-      port_mask_t _att_mask; 
-      port_reg_t *_att_oreg;
-      port_mask_t _dat_mask; 
-      port_reg_t *_dat_ireg;
-    #elif defined(HAVE_PORTREG_SC) // platform has port registers in set/clear configuration (eg. PIC32)
-      port_mask_t _clk_mask; 
-      port_reg_t *_clk_lport_set;
-      port_reg_t *_clk_lport_clr;
-      port_mask_t _cmd_mask; 
-      port_reg_t *_cmd_lport_set;
-      port_reg_t *_cmd_lport_clr;
-      port_mask_t _att_mask; 
-      port_reg_t *_att_lport_set;
-      port_reg_t *_att_lport_clr;
-      port_mask_t _dat_mask; 
-      port_reg_t *_dat_lport;
-#else // platform does not have port registers (eg. ESP8266, ESP32, ESP32C3, ESP32S3)
-
-      int _clk_pin;
-      int _cmd_pin;
-      int _att_pin;
-      int _dat_pin;
-    #endif
-
-    /* SPI configuration */
-    SPIClass* _spi; // hardware SPI class (null = software SPI)
-    #if defined(SPI_HAS_TRANSACTION)
-      SPISettings _spi_settings; // hardware SPI transaction settings
-    #endif
-
-    volatile unsigned long t_last_att; // time since last ATT inactive
-
-	
-    unsigned long last_read;
-    byte read_delay;
-    byte controller_type;
-    boolean en_Rumble;
-    boolean en_Pressures;
-};
-
+    // VSPI
+    uint8_t begin_vspi(uint8_t att, bool pressures = false, bool rumble = false);
+    // VSPI with custom pins
+    uint8_t begin_vspi(uint8_t clk, uint8_t cmd, uint8_t att, uint8_t dat, bool pressures = false, bool rumble = false);
 #endif
 
+    uint16_t ButtonDataByte();
+    void     reconfig_gamepad();
 
+private:
+    void CLK_SET();
+    void CLK_CLR();
+    void CMD_SET();
+    void CMD_CLR();
+    void ATT_SET();
+    void ATT_CLR();
+    bool DAT_CHK();
+
+    void BEGIN_SPI_NOATT();
+    void END_SPI_NOATT();
+
+    void BEGIN_SPI();
+    void END_SPI();
+
+    // common gamepad initialization sequence
+    uint8_t config_gamepad_stub(bool pressures, bool rumble);
+
+    uint8_t shiftInOut(char byte);
+    void    sendCommandString(const uint8_t* string, uint8_t len);
+
+    uint8_t  PS2data[21];
+    uint16_t last_buttons;
+    uint16_t buttons;
+
+    // pin I/O configuration, mostly relevant to software SPI support (except ATT
+    // which is used in both software and hardware SPI)
+    int _clk_pin;
+    int _cmd_pin;
+    int _att_pin;
+    int _dat_pin;
+
+    // SPI configuration
+    SPIClass* _spi;    // hardware SPI class (null = software SPI)
+#if defined(SPI_HAS_TRANSACTION)
+    SPISettings _spi_settings;    // hardware SPI transaction settings
+#endif
+
+    uint32_t t_last_att;    // time since last ATT inactive
+
+    uint32_t last_read;
+    uint8_t  read_delay;
+    uint8_t  controller_type;
+    bool     en_Rumble;
+    bool     en_Pressures;
+};
+
+
+inline void PS2X::CLK_SET()
+{
+    digitalWrite(_clk_pin, HIGH);
+}
+
+inline void PS2X::CLK_CLR()
+{
+    digitalWrite(_clk_pin, LOW);
+}
+
+inline void PS2X::CMD_SET()
+{
+    digitalWrite(_cmd_pin, HIGH);
+}
+
+inline void PS2X::CMD_CLR()
+{
+    digitalWrite(_cmd_pin, LOW);
+}
+
+inline void PS2X::ATT_SET()
+{
+    digitalWrite(_att_pin, HIGH);
+}
+
+inline void PS2X::ATT_CLR()
+{
+    digitalWrite(_att_pin, LOW);
+}
+
+inline bool PS2X::DAT_CHK()
+{
+    return digitalRead(_dat_pin) ? true : false;
+}
+
+inline void PS2X::BEGIN_SPI_NOATT()
+{
+    if (_spi != NULL)
+    {
+        _spi->beginTransaction(_spi_settings);
+    }
+    else
+    {
+        CMD_CLR();
+        CLK_SET();
+    }
+}
+
+inline void PS2X::BEGIN_SPI()
+{
+    BEGIN_SPI_NOATT();
+    while (millis() - t_last_att < CTRL_PACKET_DELAY)
+        ;
+    ATT_CLR();    // low enable joystick
+    delayMicroseconds(CTRL_BYTE_DELAY);
+}
+
+inline void PS2X::END_SPI_NOATT()
+{
+    if (_spi != NULL)
+    {
+        _spi->endTransaction();
+    }
+    else
+    {
+        CMD_CLR();
+        CLK_SET();
+    }
+}
+
+inline void PS2X::END_SPI()
+{
+    ATT_SET();
+    END_SPI_NOATT();
+    t_last_att = millis();
+}
