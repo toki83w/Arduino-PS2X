@@ -92,10 +92,10 @@ class PS2X
     static constexpr uint32_t CTRL_BITRATE{250'000UL};
 
     // delay duration between SCK high and low
-    static constexpr uint16_t CTRL_CLK{1'000'000UL / (2 * CTRL_BITRATE) > 0 ? (1'000'000UL / (2 * CTRL_BITRATE)) : 1};
+    static constexpr uint16_t CTRL_CLK{5};
 
     // delay duration between byte reads (uS)
-    static constexpr uint16_t CTRL_BYTE_DELAY{10};
+    static constexpr uint16_t CTRL_BYTE_DELAY{18};
 
     // delay duration between packets (mS) - according to playstation.txt this
     // should be set to 16mS, but it seems that it can go down to 4mS without
@@ -293,7 +293,7 @@ inline void PS2X::BEGIN_SPI_NOATT()
     }
     else
     {
-        CMD_CLR();
+        CMD_SET();
         CLK_SET();
     }
 }
@@ -315,14 +315,14 @@ inline void PS2X::END_SPI_NOATT()
     }
     else
     {
-        CMD_CLR();
+        CMD_SET();
         CLK_SET();
     }
 }
 
 inline void PS2X::END_SPI()
 {
-    ATT_SET();
     END_SPI_NOATT();
+    ATT_SET();
     t_last_att = millis();
 }

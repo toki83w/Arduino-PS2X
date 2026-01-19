@@ -194,7 +194,7 @@ uint8_t PS2X::begin(SPIClass* spi, uint8_t att, bool pressures, bool rumble, boo
     pinMode(att, OUTPUT);
     ATT_SET();
 
-    _spi_settings = SPISettings(CTRL_BITRATE, LSBFIRST, SPI_MODE0);
+    _spi_settings = SPISettings(CTRL_BITRATE, LSBFIRST, SPI_MODE3);
 
     if (begin)
         _spi->begin();    // begin SPI with default settings
